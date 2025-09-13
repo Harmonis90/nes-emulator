@@ -1,0 +1,16 @@
+# Build artifacts
+/build/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+
+# IDE files
+.idea/
+*.iml
+
+# OS crap
+.DS_Store
+Thumbs.db
+
+# ROMs
+/roms/
