@@ -30,7 +30,7 @@ static void dump_range(uint16_t start, uint16_t end)
         printf("%04X: ", a);
         for (int i = 0; i < 16 && (a + i) <= end; i++)
         {
-            printf("%02X", cpu_read((uint16_t)(a + i)));
+            printf("%02X ", cpu_read((uint16_t)(a + i)));
         }
         puts("");
     }
@@ -76,7 +76,7 @@ static int run_until_brk_or_limit(int max_steps)
 // --- Entry -------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-    const char* rom_path = (argc >= 2) ? argv[1] : "roms/controllertest2.nes";
+    const char* rom_path = (argc >= 2) ? argv[1] : "C:/Users/Seth/CLion/C/Projects/nes-emulator/roms/controllertest2.nes";
     int max_steps = (argc >= 3) ? atoi(argv[2]) : 200;
 
     printf("Loading ROM: %s\n", rom_path);

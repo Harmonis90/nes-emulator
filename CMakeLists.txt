@@ -29,6 +29,7 @@ set(PROJ_INC_DIRS
         ${CMAKE_SOURCE_DIR}/src/ppu
         ${CMAKE_SOURCE_DIR}/src/input
         ${CMAKE_SOURCE_DIR}/src/rom     # if you placed ines/mapper headers here
+        ${CMAKE_SOURCE_DIR}/src/cartridge
 )
 
 # ---- Core library + app ------------------------------------------------------
