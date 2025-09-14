@@ -1,25 +1,25 @@
-//
-// Created by Seth on 9/10/2025.
-//
-
 #pragma once
-
 #include <stdint.h>
 
+// Cartridge-controlled nametable mirroring
 typedef enum
 {
-    MIRROR_HORIZONTAL,
-    MIRROR_VERTICAL,
-    MIRROR_SINGLE_LO,
-    MIRROR_SINGLE_HI,
-    MIRROR_FOUR
-} mirroring_t;
+    MIRROR_HORIZONTAL = 0, // [A A B B]
+    MIRROR_VERTICAL = 1, // [A B A B]
+    MIRROR_SINGLE_LO = 2,  // all -> NT0 ($2000)
+    MIRROR_SINGLE_HI = 3, // all -> NT1 ($2400)
+    MIRROR_FOUR = 4 // true 4-screen (cart VRAM); we’ll fall back to V
+}mirroring_t;
 
-// Provided by cartridge/mapper (or a forwarder in ppu_regs)
-mirroring_t ppu_mem_get_mirroring(void);
+// Initialize/clear backing storage and set mirroring.
+void ppu_mem_init(mirroring_t m);
 
-void ppu_mem_reset(void);
+// Change mirroring mode at runtime (mapper-controlled).
+void ppu_mem_set_mirroring(mirroring_t m);
 
-// Raw PPU address space (PPU side): 0x0000-0x3FFF
+// Raw PPU memory space ($0000-$3FFF) — used by PPU registers ($2007).
+//  - $0000-$1FFF : CHR (ROM/RAM) via mapper
+//  - $2000-$3EFF : Nametables (2KB VRAM, mirrored per 'm')
+//  - $3F00-$3FFF : Palettes (mirrors every 32; with $3F10 alias fixups)
 uint8_t ppu_mem_read(uint16_t addr);
-void ppu_mem_write(uint16_t addr, uint8_t val);
+void ppu_mem_write(uint16_t addr, uint8_t data);

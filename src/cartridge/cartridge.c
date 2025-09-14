@@ -57,12 +57,11 @@ int cartridge_load(const char *path)
     fclose(f);
     cart_size = (size_t)n;
 
-    if (!ines_load(cart_data, cart_size))
-    {
-        fprintf(stderr, "cartridge: ines_load failed\n");
-        free_cart();
-        return -1;
-
+    int rc = ines_load(cart_data, cart_size);  // 0 = OK, nonzero = error
+    if (rc != 0) {
+        fprintf(stderr, "cartridge: ines_load failed (rc=%d)\n", rc);
+        free_cart();                // your helper that frees s_cart_data, etc.
+        return -1;                  // propagate failure
     }
     return 0;
 }

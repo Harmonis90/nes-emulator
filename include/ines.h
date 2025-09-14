@@ -13,7 +13,7 @@ extern "C"{
 #endif
     // Parse an iNES buffer and initialize the appropriate mapper.
     // Returns 1 on success, 0 on failure.
-int ines_load(const uint8_t* data, size_t len);
+int ines_load(const uint8_t* rom, size_t len);
 
 #ifdef __cplusplus
 }
