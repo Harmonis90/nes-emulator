@@ -24,9 +24,9 @@ static inline uint16_t mirror_nt_addr(uint16_t addr)
             // [A A B B]  -> NT0 for 0,1 ; NT1 for 2,3
             return (uint16_t)((nt <= 1 ? 0x000 : 0x400) + off);
 
-        case MIRROR_VERTICAL:
+    case MIRROR_VERTICAL:
             // [A B A B]  -> NT0 for 0,2 ; NT1 for 1,3
-            return (uint16_t)(((nt & 1) ? 0x000 : 0x400) + off);
+            return (uint16_t)(((nt & 1) ? 0x400 : 0x00) + off);
 
         case MIRROR_SINGLE_LO:
             return off;
