@@ -139,6 +139,9 @@ add_custom_target(generate_controllertest2
 
 
 
+add_executable(ppu_test tests/test_ppu.c)
+target_include_directories(ppu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(ppu_test nes-emulator-core)
 
 
 

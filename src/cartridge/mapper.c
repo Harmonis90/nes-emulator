@@ -1,59 +1,46 @@
+//
+// Mapper front-end dispatcher
+//
 #include <stdint.h>
-#include <stddef.h>
-#include <string.h>
-
+#include <stdio.h>
 #include "mapper.h"
 
-// Current mapper ops
-typedef struct
+// Single active mapper
+static const struct MapperOps* ops = NULL;
+
+int mapper_init(int mapper_id,
+                const uint8_t* prg, size_t prg_size,
+                const uint8_t* chr, size_t chr_size)
 {
-    uint8_t (*cpu_read)(uint16_t);
-    void (*cpu_write)(uint16_t, uint8_t);
-    uint8_t (*chr_read)(uint16_t);
-    void (*chr_write)(uint16_t, uint8_t);
-    void (*reset)(void);
-}MapperOps;
-
-extern const MapperOps* mapper_nrom_get_ops(void);
-
-static const MapperOps* g_ops = NULL;
-
-void mapper_reset(void)
-{
-    if (g_ops && g_ops -> reset) g_ops -> reset();
+    switch (mapper_id) {
+    case 0: // NROM
+        ops = mapper_nrom_init(prg, prg_size, chr, chr_size);
+        return ops != NULL;
+    default:
+        fprintf(stderr, "mapper: unsupported id %d\n", mapper_id);
+        ops = NULL;
+        return 0;
+    }
 }
 
+// ---- CPU (PRG) dispatch ----
 uint8_t mapper_cpu_read(uint16_t addr)
 {
-    return g_ops && g_ops -> cpu_read ? g_ops -> cpu_read(addr) : 0xFF;
+    return (ops && ops->cpu_read) ? ops->cpu_read(addr) : 0xFF;
 }
 
-void mapper_cpu_write(uint16_t addr, uint8_t data)
+void mapper_cpu_write(uint16_t addr, uint8_t value)
 {
-    if (g_ops && g_ops -> cpu_write) g_ops -> cpu_write(addr, data);
+    if (ops && ops->cpu_write) ops->cpu_write(addr, value);
 }
 
+// ---- PPU (CHR) dispatch ----
 uint8_t mapper_chr_read(uint16_t addr)
 {
-    return g_ops && g_ops -> chr_read ? g_ops -> chr_read(addr) : 0x00;
+    return (ops && ops->chr_read) ? ops->chr_read(addr) : 0x00;
 }
 
-void mapper_chr_write(uint16_t addr, uint8_t data)
+void mapper_chr_write(uint16_t addr, uint8_t value)
 {
-    if (g_ops && g_ops -> chr_write) g_ops -> chr_write(addr, data);
-}
-
-// ---- NROM hook from iNES loader ---------------------------------------------
-void mapper_nrom_init(uint8_t* prg, size_t prg_size,
-                    uint8_t* chr, size_t chr_size,
-                    int chr_is_ram)
-{
-    extern void nrom_set_blobs(uint8_t* prg, size_t prg_size,
-                                uint8_t* chr, size_t chr_size,
-                                int chr_is_ram);
-
-        nrom_set_blobs(prg, prg_size, chr, chr_size, chr_is_ram);
-        g_ops = mapper_nrom_get_ops();
-        mapper_reset();
-
+    if (ops && ops->chr_write) ops->chr_write(addr, value);
 }

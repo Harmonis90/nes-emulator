@@ -137,7 +137,7 @@ static inline void op_BRK(void)
 
 static inline void op_SEI(void){ set_flag(FLAG_I, 1); }
 static inline void op_CLI(void) { set_flag(FLAG_I, 0); }
-static inline void op_CLD(void) { set_flag(FLAG_I, 0); }
+static inline void op_CLD(void) { set_flag(FLAG_D, 0); }
 
 // Loads (A)
 static inline void op_LDA_imm(void) { cpu.A = fetch8(); set_zn(cpu.A); }
@@ -405,7 +405,7 @@ static inline void op_PLP(void)
     uint8_t v = pop8();
     v |= FLAG_U;
     v &= (uint8_t)~FLAG_B;
-    push8(v);
+    cpu.P = v;
 }
 
 // Transfer Stack Pointer <-> X

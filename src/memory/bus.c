@@ -1,212 +1,109 @@
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include "bus.h"
-#include "controller.h"
-#include "mapper.h"
 #include "ppu.h"
-
-
-// -------------------------
-// Memory backing
-// -------------------------
-static uint8_t cpu_ram[0x0800];  // 2KB internal ram
-static uint8_t prg_ram[0x2000];  // 8KB PRG-RAM ($6000-$7FFF), optional
-static uint8_t prg_rom[0x8000];  // up to 32KB PRG mapped at $8000-$FFFF
-
-// Size of valid PRG data in prg_rom[]: 0x4000 (16KB) or 0x8000 (32KB).
-// For our test harness we default to 32KB so writes to $8000 work without loader.
-static size_t prg_size_bytes = 0x8000;
-
-// Allow writes to $8000-$FFFF for the test harness (acts like RAM).
-// Set this to 0 if you later load a real ROM and want true read-only behavior.
-static int debug_allow_write_rom = 1;
-
-// One-time warnings to keep logs clean.
-static int warned_ppu = 0, warned_apu = 0, warned_test = 0;
+#include "mapper.h"
+#include "controller.h"
+// #include "apu.h"  // uncomment once you add real APU read/write
 
 // -------------------------
-// Helpers
+// Internal memory
 // -------------------------
-static inline uint8_t prg_read(uint16_t addr)
-{
-    // addr in $8000-$FFFF
-    if (prg_size_bytes == 0x4000)
-    {
-        size_t idx = (addr - 0x8000) & 0x3FFF;
-        return prg_rom[idx];
-    }
-    else
-    {
-        size_t idx = (addr - 0x8000) & 0x7FFF;
-        return prg_rom[idx];
-    }
+#define CPU_RAM_SIZE 0x0800  // 2KB internal RAM
+static uint8_t s_cpu_ram[CPU_RAM_SIZE];
+
+#define PRG_RAM_SIZE 0x2000  // 8KB PRG-RAM at $6000-$7FFF (optional on real carts)
+static uint8_t s_prg_ram[PRG_RAM_SIZE];
+
+// -------------------------
+// Bus init/reset
+// -------------------------
+void bus_reset(void) {
+    memset(s_cpu_ram, 0, sizeof s_cpu_ram);
+    memset(s_prg_ram, 0, sizeof s_prg_ram);
 }
 
-static inline void prg_write(uint16_t addr, uint8_t val)
-{
-    if (!debug_allow_write_rom) return;
-    if (prg_size_bytes == 0x4000)
-    {
-        size_t idx = (addr - 0x8000) & 0x3FFF;
-        prg_rom[idx] = val;
-    }
-    else
-    {
-        size_t idx = (addr - 0x8000) & 0x7FFF;
-        prg_rom[idx] = val;
-    }
+// Optional API (kept to satisfy header; not required for mapper 0)
+void bus_set_prg_size(size_t sz_bytes) {
+    (void)sz_bytes;
 }
 
 // -------------------------
-// Public API
+// CPU reads
 // -------------------------
-void bus_reset(void)
-{
-    memset(cpu_ram, 0, sizeof(cpu_ram));
-    memset(prg_ram, 0, sizeof(prg_ram));
-    memset(prg_rom, 0, sizeof(prg_rom));
-
-    prg_size_bytes = 0x8000;
-    debug_allow_write_rom = 1;
-    warned_ppu = warned_apu = warned_test = 0;
-}
-
-// Optional helpers if you later add a loader:
-void bus_load_prg(const uint8_t *data, size_t len)
-{
-    if (!data || (len != 0x4000 && len != 0x8000))
-    {
-        if (!warned_test)
-        {
-            fprintf(stderr, "bus: invalid PRG size %zu (expected 16KB/32KB). Using debug buffer.\n", len);
-            warned_test = 1;
-        }
-        return;
-    }
-    memcpy(prg_rom, data, len);
-    if (len == 0x4000)
-    {
-        memcpy(prg_rom + 0x4000, prg_rom, 0x4000);
-    }
-    prg_size_bytes = len;
-    debug_allow_write_rom = 0;
-}
-
-void bus_set_prg_size(size_t sz_bytes)
-{
-    // For tests: force mirroring behavior without a ROM file.
-    if (sz_bytes == 0x4000 || sz_bytes == 0x8000)
-    {
-        prg_size_bytes = sz_bytes;
-    }
-}
-
-void bus_set_rom_write_enabled(int on)
-{
-    debug_allow_write_rom = on ? 1 : 0;
-}
-
-uint8_t cpu_read(uint16_t addr)
-{
+uint8_t cpu_read(uint16_t addr) {
     // $0000-$1FFF: 2KB RAM, mirrored every $0800
-    if (addr <= 0x1FFF)
-    {
-        return cpu_ram[addr & 0x07FF];
+    if (addr <= CPU_RAM_END) {
+        return s_cpu_ram[addr & (CPU_RAM_SIZE - 1)];
     }
-    // $2000-$3FFF: PPU registers (mirrored every 8) — stubbed
-    if (addr >= 0x2000 && addr <= 0x3FFF)
-    {
-       return ppu_read(addr);
+
+    // $2000-$3FFF: PPU registers, mirrored every 8 bytes
+    if (addr >= PPU_REG_START && addr <= PPU_REG_END) {
+        uint16_t reg = (uint16_t)(0x2000u + (addr & 0x0007u));
+        return ppu_read(reg);
     }
-    // $4000-$4017: APU/IO — stubbed
-    if (addr >= 0x4000 && addr <= 0x4017)
-    {
-        if (addr == 0x4016 || addr == 0x4017)
-        {
+
+    // $4000-$4017: APU + I/O
+    if (addr >= APU_IO_START && addr <= APU_IO_END) {
+        if (addr == 0x4016 || addr == 0x4017) {
             return controller_read(addr);
         }
-
-        if (!warned_apu)
-        {
-            fprintf(stderr, "APU/IO reads return 0 (first hit at %04X)\n", addr);
-            warned_apu = 1;
-        }
+        // TODO: return apu_read(addr) once implemented
         return 0x00;
     }
 
-    // $4018-$401F: disabled/test — return 0
-    if (addr >= 0x4018 && addr <= 0x401F)
-    {
+    // $4018-$401F: disabled/test regs
+    if (addr >= 0x4018 && addr <= 0x401F) {
         return 0x00;
     }
 
-    // $6000-$7FFF: PRG-RAM (if present)
-    if (addr >= 0x6000 && addr <= 0x7FFF)
-    {
-        return prg_ram[addr - 0x6000];
+    // $6000-$7FFF: PRG-RAM
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        return s_prg_ram[addr - 0x6000];
     }
 
-    // $8000-$FFFF: PRG (ROM in release; writable in debug mode)
-    if (addr >= 0x8000)
-    {
-        return mapper_cpu_read(addr);
-    }
-
-    // Should never happen
-    return 0x00;
+    // $8000-$FFFF: cartridge space via active mapper
+    return mapper_cpu_read(addr);
 }
 
-void cpu_write(uint16_t addr, uint8_t val)
-{
+// -------------------------
+// CPU writes
+// -------------------------
+void cpu_write(uint16_t addr, uint8_t data) {
     // $0000-$1FFF: 2KB RAM, mirrored
-    if (addr <= 0x1FFF)
-    {
-        cpu_ram[addr & 0x07FF] = val;
+    if (addr <= CPU_RAM_END) {
+        s_cpu_ram[addr & (CPU_RAM_SIZE - 1)] = data;
         return;
     }
 
-    // $2000-$3FFF: PPU regs (ignored for now)
-    if (addr >= 0x2000 && addr <= 0x3FFF)
-    {
-        ppu_write(addr, val);
+    // $2000-$3FFF: PPU registers, mirrored every 8 bytes
+    if (addr >= PPU_REG_START && addr <= PPU_REG_END) {
+        uint16_t reg = (uint16_t)(0x2000u + (addr & 0x0007u));
+        ppu_write(reg, data);
         return;
     }
 
-    // $4000-$4017: APU/IO (ignored for now)
-    if (addr >= 0x4000 && addr <= 0x4017)
-    {
-        if (addr == 0x4016)
-        {
-            controller_write(addr, val);
+    // $4000-$4017: APU + I/O
+    if (addr >= APU_IO_START && addr <= APU_IO_END) {
+        if (addr == 0x4016 || addr == 0x4017) {
+            controller_write(addr, data);
             return;
         }
-        if (!warned_apu)
-        {
-            fprintf(stderr, "Unhandled APU/IO write at %04X = %02X\n", addr, val);
-            warned_apu = 1;
-        }
+        // TODO: apu_write(addr, data) once implemented
         return;
     }
 
-    // $4018-$401F: disabled/test
-    if (addr >= 0x4018 && addr <= 0x401F)
-    {
+    // $4018-$401F: disabled/test regs
+    if (addr >= 0x4018 && addr <= 0x401F) {
         return;
     }
 
     // $6000-$7FFF: PRG-RAM
-    if (addr >= 0x6000 && addr <= 0x7FFF)
-    {
-        prg_ram[addr - 0x6000] = val;
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        s_prg_ram[addr - 0x6000] = data;
         return;
     }
 
-    // $8000-$FFFF: PRG window
-    if (addr >= 0x8000)
-    {
-        mapper_cpu_write(addr, val);
-        return;
-    }
-
+    // $8000-$FFFF: cartridge space via active mapper
+    mapper_cpu_write(addr, data);
 }
