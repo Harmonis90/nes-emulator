@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "bus.h"
 #include "cpu.h"
 #include "ppu_mem.h"
 #include "ppu_regs.h"
@@ -65,6 +66,23 @@ void ppu_regs_reset(void)
 void ppu_regs_oam_clear(void) { memset(OAM, 0, sizeof(OAM)); }
 uint8_t ppu_regs_oam_peek(uint8_t index) { return OAM[index]; }
 void ppu_regs_oam_poke(uint8_t index, uint8_t v_) { OAM[index] = v_; }
+
+void ppu_oam_dma(uint8_t page)
+{
+    // Copy 256 bytes from CPU page (page << 8) to OAM starting at OAMADDR.
+    // This matches your OAM behavior: $2004 write auto-increments OAMADDR.
+    uint16_t base = (uint16_t)((uint16_t)page << 8);
+    uint8_t addr = OAMADDR;
+
+    for (int i = 0; i < 256; i++)
+    {
+        uint8_t v = cpu_read((uint16_t)(base + i));
+        OAM[addr] = v;
+        addr++;
+    }
+    OAMADDR = addr;
+}
+
 
 // Set/clear VBlank bit, optionally trigger NMI if enabled
 void ppu_regs_set_vblank(bool on)

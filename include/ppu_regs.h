@@ -33,6 +33,7 @@ static inline void ppu_regs_clear_vblank(void) { ppu_regs_set_vblank(false); }
 
 // --- Optional tiny OAM accessors (useful for tests) --------------------------
 void ppu_regs_oam_clear(void);  // fill OAM with 0
+void ppu_oam_dma(uint8_t page); // called when CPU writes $4014
 uint8_t ppu_regs_oam_peek(uint8_t index); // non-incrementing peek
 void ppu_regs_oam_poke(uint8_t index, uint8_t v);
 

@@ -10,6 +10,7 @@
 // ---- CPU-visible bus API ----
 uint8_t cpu_read(uint16_t addr);
 void cpu_write(uint16_t addr, uint8_t data);
+
 void bus_reset(void);
 void bus_set_prg_size(size_t sz_bytes);
 

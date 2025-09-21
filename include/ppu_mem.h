@@ -16,6 +16,7 @@ void ppu_mem_init(mirroring_t m);
 
 // Change mirroring mode at runtime (mapper-controlled).
 void ppu_mem_set_mirroring(mirroring_t m);
+mirroring_t ppu_mem_get_mirroring(void);
 
 // Raw PPU memory space ($0000-$3FFF) — used by PPU registers ($2007).
 //  - $0000-$1FFF : CHR (ROM/RAM) via mapper

@@ -1,9 +1,12 @@
+// src/bus.c
 #include <stdint.h>
 #include <string.h>
 #include "bus.h"
+#include "cpu.h"
 #include "ppu.h"
 #include "mapper.h"
 #include "controller.h"
+#include "ppu_regs.h"
 // #include "apu.h"  // uncomment once you add real APU read/write
 
 // -------------------------
@@ -48,7 +51,7 @@ uint8_t cpu_read(uint16_t addr) {
         if (addr == 0x4016 || addr == 0x4017) {
             return controller_read(addr);
         }
-        // TODO: return apu_read(addr) once implemented
+        // reads of other APU regs / $4014 typically return open bus; 0x00 is fine for now
         return 0x00;
     }
 
@@ -85,6 +88,13 @@ void cpu_write(uint16_t addr, uint8_t data) {
 
     // $4000-$4017: APU + I/O
     if (addr >= APU_IO_START && addr <= APU_IO_END) {
+        if (addr == 0x4014) {            // OAM DMA page
+            ppu_oam_dma(data);
+            // DMA stalls the CPU for 513 or 514 cycles (depends on current CPU cycle parity)
+            int add = 513 + (cpu_cycles_parity() & 1);
+            cpu_dma_stall(add);
+            return;
+        }
         if (addr == 0x4016 || addr == 0x4017) {
             controller_write(addr, data);
             return;
