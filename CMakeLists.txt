@@ -1,10 +1,9 @@
-# CMakeLists.txt — NES Emulator (C)
 cmake_minimum_required(VERSION 3.20)
 project(nes-emulator C)
 
-# ------------------------------------------------------------------------------
+# -------------------------------
 # Language / warnings
-# ------------------------------------------------------------------------------
+# -------------------------------
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -14,9 +13,19 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# ------------------------------------------------------------------------------
+# -------------------------------
+# Toggleable DEBUG_TRACE
+# -------------------------------
+# Turn on with: -DDEBUG_TRACE=ON  (CLion: Settings -> CMake -> CMake options)
+option(DEBUG_TRACE "Enable verbose CPU trace logs" OFF)
+
+# Also auto-enable in Debug config (you can delete this if you prefer manual only)
+# This makes DEBUG builds trace by default; Release/RelWithDebInfo won't unless you pass -DDEBUG_TRACE=ON
+#set(_TRACE_GENEX $<$<OR:$<BOOL:${DEBUG_TRACE}>,$<CONFIG:Debug>>:DEBUG_TRACE=1>)
+
+# -------------------------------
 # Include paths
-# ------------------------------------------------------------------------------
+# -------------------------------
 set(PROJ_INC_DIRS
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/src
@@ -26,13 +35,12 @@ set(PROJ_INC_DIRS
         ${CMAKE_SOURCE_DIR}/src/input
         ${CMAKE_SOURCE_DIR}/src/cartridge
         ${CMAKE_SOURCE_DIR}/src/rom
+        ${CMAKE_SOURCE_DIR}/src/nes
 )
 
-# ------------------------------------------------------------------------------
-# Core library (NO BUS HERE!)
-#   The core is everything that doesn’t define cpu_read/cpu_write.
-#   This lets unit tests provide a mock bus without duplicate symbols.
-# ------------------------------------------------------------------------------
+# -------------------------------
+# Core library (NO bus here)
+# -------------------------------
 add_library(nes-emulator-core
         # CPU
         src/cpu/cpu.c
@@ -45,7 +53,9 @@ add_library(nes-emulator-core
         # PPU
         src/ppu/ppu.c
         src/ppu/ppu_mem.c
+        src/ppu/ppu_oam.c
         src/ppu/ppu_regs.c
+        src/ppu/ppu_timing.c
 
         # Cartridge + mappers
         src/cartridge/cartridge.c
@@ -56,54 +66,60 @@ add_library(nes-emulator-core
         # Input
         src/input/controller.c
 
-        # Utils / headers-only are picked up via include dirs
+        # NES
+        src/nes/nes.c
+        src/nes/rom_loader.c
 )
 
 target_include_directories(nes-emulator-core PUBLIC ${PROJ_INC_DIRS})
+target_compile_definitions(nes-emulator-core PRIVATE ${_TRACE_GENEX})
 
-# ------------------------------------------------------------------------------
-# Emulator executable (real BUS implementation linked here)
-# ------------------------------------------------------------------------------
+# -------------------------------
+# Emulator executable (real BUS)
+# -------------------------------
 add_executable(nes-emulator
         src/main.c
-        src/memory/bus.c      # <- provides cpu_read/cpu_write for the real emulator
+        src/memory/bus.c        # provides cpu_read/cpu_write for the real emulator
 )
-
 target_include_directories(nes-emulator PRIVATE ${PROJ_INC_DIRS})
 target_link_libraries(nes-emulator PRIVATE nes-emulator-core)
+target_compile_definitions(nes-emulator PRIVATE ${_TRACE_GENEX})
 
-# Put the emulator exe at the build root (nice for CLion Run Configs)
+# Put binary at build root (handy for CLion run configs)
 set_target_properties(nes-emulator PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
-# ------------------------------------------------------------------------------
-# Tests
-#   cpu-core-tests links nes-emulator-core and provides a MOCK bus,
-#   so we do NOT link src/memory/bus.c into this test target.
-# ------------------------------------------------------------------------------
+# -------------------------------
+# Tests (mock bus)
+# -------------------------------
 enable_testing()
 
 add_executable(cpu-core-tests
-        tests/test_bus.c          # mock cpu_read/cpu_write
+        tests/test_bus.c        # mock cpu_read/cpu_write for unit tests
         tests/test_cpu_core.c
 )
 target_include_directories(cpu-core-tests PRIVATE ${PROJ_INC_DIRS} ${CMAKE_SOURCE_DIR}/tests)
 target_link_libraries(cpu-core-tests PRIVATE nes-emulator-core)
+target_compile_definitions(cpu-core-tests PRIVATE ${_TRACE_GENEX})
 add_test(NAME cpu-core-tests COMMAND cpu-core-tests)
 
-# Example placeholder for PPU tests (add when ready):
-# add_executable(ppu-tests tests/test_ppu.c tests/test_bus.c)
-# target_include_directories(ppu-tests PRIVATE ${PROJ_INC_DIRS} ${CMAKE_SOURCE_DIR}/tests)
-# target_link_libraries(ppu-tests PRIVATE nes-emulator-core)
-# add_test(NAME ppu-tests COMMAND ppu-tests)
+#----------------------------
+# Test PPU/VBlank
+#----------------------------
+option(ENABLE_PPU_TRACE "Log one line per frame and VBL edges" OFF)
 
-# ------------------------------------------------------------------------------
-# Notes
-# ------------------------------------------------------------------------------
-# * The core library intentionally excludes src/memory/bus.c so unit tests can
-#   provide a mock bus without duplicate symbol errors.
-# * On Windows/MinGW, nothing special is required here; CLion’s toolchain will
-#   pick up the right linker. If you add the APU later, just append its sources
-#   to nes-emulator-core.
-# * Run:  ./nes-emulator <path-to-rom>
+if (ENABLE_PPU_TRACE)
+    target_compile_definitions(nes-emulator PRIVATE PPU_TRACE=1)
+    target_compile_definitions(nes-emulator-core PRIVATE PPU_TRACE=1)
+    # keep tests consistent if you like
+    if (TARGET tests)
+        target_compile_definitions(tests PRIVATE PPU_TRACE=1)
+    endif()
+endif()
+
+
+# Notes:
+# * The core library excludes the real bus so tests can link a mock bus without duplicate symbols.
+# * To force trace ON for any config: pass -DDEBUG_TRACE=ON in CLion's CMake options.
+# * To force trace OFF even in Debug: pass -DDEBUG_TRACE=OFF.

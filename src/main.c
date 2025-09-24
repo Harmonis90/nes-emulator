@@ -1,103 +1,100 @@
+// src/main.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 
-#include "cartridge.h"
-#include "bus.h"
-#include "cpu.h"
+#include "nes.h"
+#include "cpu.h"         // for cpu_get_cycles() if you want extra stats
+#include "ppu.h"         // optional
+#include "cartridge.h"   // fallback if nes_load_rom_file isn't available
 
+static void usage(const char *prog) {
+    fprintf(stderr,
+        "usage: %s <rom.nes> [-f frames] [-s seconds]\n"
+        "  exactly one of -f or -s may be given. if neither, runs 1 frame.\n"
+        "examples:\n"
+        "  %s nestest.nes -f 60     # run 60 frames\n"
+        "  %s nestest.nes -s 1.0    # run ~1 second\n",
+        prog, prog, prog
+    );
+}
 
-static inline uint16_t cpu_pc(void);
-static inline uint8_t cpu_a(void);
-static inline uint8_t cpu_x(void);
-static inline uint8_t cpu_y(void);
-static inline uint8_t cpu_p(void);
-static inline uint8_t cpu_sp(void);
+int main(int argc, char **argv) {
+    if (argc < 2) { usage(argv[0]); return 1; }
 
-static inline uint16_t cpu_pc(void) { return cpu_get_pc(); }
-static inline uint8_t cpu_a(void) { return cpu_get_a(); }
-static inline uint8_t cpu_x(void) { return cpu_get_x(); }
-static inline uint8_t cpu_y(void) { return cpu_get_y(); }
-static inline uint8_t cpu_p(void) { return cpu_get_p(); }
-static inline uint8_t cpu_sp(void) { return cpu_get_sp(); }
+    const char *rom_path = argv[1];
+    int   have_frames = 0;
+    int   frames = 1;
+    int   have_seconds = 0;
+    double seconds = 0.0;
 
-// --- Helpers -----------------------------------------------------------------
-static void dump_range(uint16_t start, uint16_t end)
-{
-    for (uint16_t a = start; a <= end; a += 16)
-    {
-        printf("%04X: ", a);
-        for (int i = 0; i < 16 && (a + i) <= end; i++)
-        {
-            printf("%02X ", cpu_read((uint16_t)(a + i)));
+    // parse options
+    for (int i = 2; i < argc; ++i) {
+        if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
+            frames = (int)strtol(argv[++i], NULL, 10);
+            have_frames = 1;
+        } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
+            seconds = strtod(argv[++i], NULL);
+            have_seconds = 1;
+        } else {
+            usage(argv[0]);
+            return 1;
         }
-        puts("");
     }
-}
-
-static void print_flags(uint8_t P)
-{
-    // NVU B D I Z C (U is unused=1 on 6502 clones)
-    printf("N=%d V=%d U=%d B=%d D=%d I=%d Z=%d C=%d\n",
-        !!(P & 0x80), !!(P & 0x40), !!(P & 0x20), !!(P & 0x10),
-        !!(P & 0x08), !!(P & 0x04), !!(P & 0x02), !!(P & 0x01));
-}
-
-static void print_cpu(const char* tag)
-{
-    printf("%s PC=%04X A=%02X X=%02X Y=%02X P=%02X SP=%02X\n",
-        tag, cpu_pc(), cpu_a(), cpu_x(), cpu_y(), cpu_p(), cpu_sp());
-    print_flags(cpu_p());
-}
-
-// --- Runner ------------------------------------------------------------------
-static int run_until_brk_or_limit(int max_steps)
-{
-    for (int step = 0; step < max_steps; step++)
-    {
-        uint16_t pc = cpu_pc();
-        uint8_t op = cpu_read(pc);
-
-        printf("STEP %4d: PC=%04X op=%02X\n", step, pc, op);
-
-        if (op == 0x00)
-        {
-            // BRK: emulate vector fetch by your CPU; here we just log and stop.
-            printf("BRK at %04X\n", pc);
-            return 0;
-        }
-        // Execute one instruction (advance PC internally)
-        cpu_step();
-    }
-    return 0;
-}
-
-// --- Entry -------------------------------------------------------------------
-int main(int argc, char** argv)
-{
-    const char* rom_path = (argc >= 2) ? argv[1] : "C:/Users/Seth/CLion/C/Projects/nes-emulator/roms/controllertest2.nes";
-    int max_steps = (argc >= 3) ? atoi(argv[2]) : 200;
-
-    printf("Loading ROM: %s\n", rom_path);
-    if (cartridge_load(rom_path) != 0)
-    {
-        fprintf(stderr, "Failed to load cartridge.\n");
+    if (have_frames && have_seconds) {
+        fprintf(stderr, "error: choose either -f or -s, not both.\n");
         return 1;
     }
+    if (!have_frames && !have_seconds) {
+        // default: run 1 frame
+        frames = 1;
+        have_frames = 1;
+    }
 
-    cpu_reset();
-    bus_reset();
+    // --- boot the console ---
+    nes_init();
 
-    printf("After reset PC=%04X\n", cpu_pc());
+    // load ROM (prefer nes_load_rom_file if you kept that API)
+#if defined(__has_include)
+# if __has_include("nes.h")
+    if (nes_load_rom_file(rom_path) == 0) {
+        fprintf(stderr, "failed to load ROM: %s\n", rom_path);
+        return 1;
+    }
+# else
+    if (cartridge_load_file(rom_path) != 0) {
+        fprintf(stderr, "failed to load ROM: %s\n", rom_path);
+        return 1;
+    }
+# endif
+#else
+    // If your toolchain lacks __has_include, call cartridge loader directly:
+    if (cartridge_load_file(rom_path) != 0) {
+        fprintf(stderr, "failed to load ROM: %s\n", rom_path);
+        return 1;
+    }
+#endif
 
-    printf("Dump around reset $%04X...$%04X:\n", cpu_pc(), cpu_pc() + 0x10);
-    dump_range(cpu_pc(), (cpu_pc() + 0x10));
+    nes_reset();
 
-    run_until_brk_or_limit(max_steps);
-    print_cpu("Final CPU:");
+    // --- run ---
+    if (have_frames) {
+        if (frames < 0) frames = 0;
+        for (int i = 0; i < frames; ++i) {
+            uint64_t f = nes_step_frame();
+            // comment out if too chatty:
+            //printf("frame %llu\n", (unsigned long long)f);
+        }
+    } else {
+        if (seconds < 0.0) seconds = 0.0;
+        nes_step_seconds(seconds);
+        printf("ran ~%.3f seconds, frame=%llu cycles=%llu\n",
+               seconds,
+               (unsigned long long)nes_frame_count(),
+               (unsigned long long)cpu_get_cycles());
+    }
 
-    cartridge_unload();
+    nes_shutdown();
     return 0;
-
 }

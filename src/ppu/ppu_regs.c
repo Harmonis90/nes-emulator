@@ -46,6 +46,10 @@ static inline uint16_t clamp_14bit(uint16_t a)
     return (uint16_t)(a & 0x3FFF);
 }
 
+uint8_t ppu_regs_status_peek(void)
+{
+    return PPUSTATUS;
+}
 // -------------------------- Public API ----------------------------------------
 void ppu_regs_reset(void)
 {

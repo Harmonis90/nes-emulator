@@ -24,6 +24,7 @@ static uint8_t s_prg_ram[PRG_RAM_SIZE];
 void bus_reset(void) {
     memset(s_cpu_ram, 0, sizeof s_cpu_ram);
     memset(s_prg_ram, 0, sizeof s_prg_ram);
+
 }
 
 // Optional API (kept to satisfy header; not required for mapper 0)
@@ -48,6 +49,7 @@ uint8_t cpu_read(uint16_t addr) {
 
     // $4000-$4017: APU + I/O
     if (addr >= APU_IO_START && addr <= APU_IO_END) {
+
         if (addr == 0x4016 || addr == 0x4017) {
             return controller_read(addr);
         }

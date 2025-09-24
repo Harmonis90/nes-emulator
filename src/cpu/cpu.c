@@ -71,30 +71,34 @@ void cpu_nmi(void)
 // -----------------------------------------------------------------------------
 void cpu_step(void)
 {
-    // Handle pending NMI first, then IRQ
-    if (cpu_ctx.nmi_pending)
-    {
-        cpu_ctx.nmi_pending = 0;
-        interrupt_enter(0xFFFA, 0); // NMI vector
-        cpu_cycles_add(7);
-        return;
-    }
-    if (cpu_ctx.irq_pending)
-    {
-        cpu_ctx.irq_pending = 0;
-        interrupt_enter(0xFFFE, 0); // IRQ vector
-        cpu_cycles_add(7);
-        return;
-    }
-    // Fetch opcode
-    uint16_t pc = cpu_get_pc();
-    uint8_t opcode = cpu_read(pc);
+    // interrupts (keep as-is)
+    if (cpu_ctx.nmi_pending) { cpu_ctx.nmi_pending = 0; interrupt_enter(0xFFFA, 0); cpu_cycles_add(7); }
+    if (cpu_ctx.irq_pending) { cpu_ctx.irq_pending = 0; interrupt_enter(0xFFFE, 0); cpu_cycles_add(7); }
+
+    const uint64_t cyc0 = cpu_get_cycles();
+    const uint16_t pc   = cpu_get_pc();
+    const uint8_t  op   = cpu_read(pc);
+
+    // trace BEFORE executing the opcode
+    TRACE("PRE  C=%llu  PC=%04X  OP=%02X  A=%02X X=%02X Y=%02X P=%02X SP=%02X\n",
+          (unsigned long long)cyc0, pc, op,
+          cpu_get_a(), cpu_get_x(), cpu_get_y(), cpu_get_p(), cpu_get_sp());
+
+    // base cycles + bump PC past opcode
+    cpu_cycles_add(cpu_base_cycles[op]);
     cpu_set_pc((uint16_t)(pc + 1));
 
-    // Dispatch
-    cpu_cycles_add(cpu_base_cycles[opcode]);
-    cpu_dispatch[opcode]();
+    // execute
+    cpu_dispatch[op]();
+
+    // trace AFTER executing the opcode
+    const uint64_t cyc1 = cpu_get_cycles();
+    TRACE("POST C=%llu (+%llu) PC=%04X  A=%02X X=%02X Y=%02X P=%02X\n",
+          (unsigned long long)cyc1, (unsigned long long)(cyc1 - cyc0),
+          cpu_get_pc(), cpu_get_a(), cpu_get_x(), cpu_get_y(), cpu_get_p());
 }
+
+
 
 // -----------------------------------------------------------------------------
 // Optional disassembler (for debugging / testing)

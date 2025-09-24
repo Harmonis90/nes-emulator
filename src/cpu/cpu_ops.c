@@ -82,16 +82,22 @@ static inline void rmw_abx(uint16_t addr, uint8_t (*fn)(uint8_t)){
 // Branch helper: +1 if taken; +1 more if page crossed
 // (Base=2 is added by cpu_step via cpu_base_cycles)
 // -----------------------------------------------------------------------------
-static inline void branch_if(int cond){
-    int8_t rel = (int8_t)fetch8();
-    uint16_t pc_after = cpu_get_pc();       // PC after consuming operand
-    if(cond){
+// in cpu_ops.c
+static inline void branch_if(int cond) {
+    int8_t rel = (int8_t)fetch8();            // PC now points to next instr
+    uint16_t pc_after = cpu_get_pc();
+    if (cond) {
         uint16_t tgt = (uint16_t)(pc_after + rel);
+        TRACE("BR   rel=%d  pc_after=%04X -> tgt=%04X  crossed=%d\n",
+              rel, pc_after, tgt, ((pc_after ^ tgt) & 0xFF00) != 0);
         cpu_set_pc(tgt);
-        ADD_CYC(1);                         // taken
-        if(((pc_after ^ tgt) & 0xFF00) != 0) ADD_CYC(1); // page-cross
+        cpu_cycles_add(1);
+        if (((pc_after ^ tgt) & 0xFF00) != 0) cpu_cycles_add(1);
+    } else {
+        TRACE("BR   not-taken  rel=%d  pc_after=%04X\n", rel, pc_after);
     }
 }
+
 
 // -----------------------------------------------------------------------------
 // SYSTEM / FLOW
@@ -113,29 +119,45 @@ void RTS(void){
 }
 void JSR_abs(void){
     uint16_t dst = fetch16();
+#ifdef DEBUG_TRACE
+    fprintf(stderr, "JSR to %04X  bytes: [%04X]=%02X  [%04X]=%02X  [%04X]=%02X\n",
+            dst,
+            (uint16_t)(dst-1), cpu_read((uint16_t)(dst-1)),
+            dst,             cpu_read(dst),
+            (uint16_t)(dst+1), cpu_read((uint16_t)(dst+1)));
+#endif
     uint16_t ret = (uint16_t)(cpu_get_pc() - 1);
     push16(ret);
     cpu_set_pc(dst);
 }
+
 void JMP_abs(void){ cpu_set_pc(fetch16()); }
 void JMP_ind(void){ cpu_set_pc(cpu_addr_ind()); }
 
 // -----------------------------------------------------------------------------
 // BRANCHES
 // -----------------------------------------------------------------------------
-void BPL(void){ branch_if((cpu_get_p() & FLAG_N) == 0); }
-void BMI(void){ branch_if((cpu_get_p() & FLAG_N) != 0); }
-void BVC(void){ branch_if((cpu_get_p() & FLAG_V) == 0); }
-void BVS(void){ branch_if((cpu_get_p() & FLAG_V) != 0); }
-void BCC(void){ branch_if((cpu_get_p() & FLAG_C) == 0); }
-void BCS(void){ branch_if((cpu_get_p() & FLAG_C) != 0); }
-void BNE(void){ branch_if((cpu_get_p() & FLAG_Z) == 0); }
-void BEQ(void){ branch_if((cpu_get_p() & FLAG_Z) != 0); }
+void BPL(void) { branch_if((get_flag(FLAG_N) == 0)); }
+void BMI(void) { branch_if((get_flag(FLAG_N) != 0)); }
+void BVC(void) { branch_if((get_flag(FLAG_V) == 0)); }
+void BVS(void) { branch_if((get_flag(FLAG_V) != 0)); }
+void BCC(void) { branch_if((get_flag(FLAG_C) == 0)); }
+void BCS(void) { branch_if((get_flag(FLAG_C) != 0)); }
+void BNE(void) { branch_if((get_flag(FLAG_Z) == 0)); }
+void BEQ(void) { branch_if((get_flag(FLAG_Z) != 0)); }
 
 // -----------------------------------------------------------------------------
 // LOADS
 // -----------------------------------------------------------------------------
-void LDA_imm(void){ lda_load(fetch8()); }
+void LDA_imm(void){
+
+    uint16_t pc_before = cpu_get_pc();
+    uint8_t v = fetch8();
+    TRACE("LDA# imm=%02X  at=%04X\n", v, pc_before);
+    cpu_set_a(v);
+    set_zn(v);
+}
+
 void LDA_zp (void){ lda_load(rd(cpu_addr_zp())); }
 void LDA_zpx(void){ lda_load(rd(cpu_addr_zpx())); }
 void LDA_abs(void){ lda_load(rd(cpu_addr_abs())); }

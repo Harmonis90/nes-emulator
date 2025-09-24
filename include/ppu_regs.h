@@ -23,6 +23,7 @@ static inline void ppu_regs_set_mirroring(mirroring_t m)
     ppu_mem_set_mirroring(m);
 }
 
+uint8_t ppu_regs_status_peek(void);
 // --- Minimal vblank control (for early tests) --------------------------------
 // Set/clear VBlank in PPUSTATUS. If NMI is enabled (PPUCTRL bit 7), will raise NMI.
 void ppu_regs_set_vblank(bool on);

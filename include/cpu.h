@@ -81,6 +81,27 @@ void do_adc(uint8_t m);
 // -----------------------------------------------------------------------------
 const char* cpu_dissasm(uint16_t pc, char* buf, size_t buflen);
 
+
+    // --- tracing ---------------------------------------------------------------
+#ifdef DEBUG_TRACE
+#include <stdio.h>
+#define TRACE_ON  1
+#else
+#define TRACE_ON  0
+#endif
+
+#if TRACE_ON
+#define TRACE(...)  do { fprintf(stderr, __VA_ARGS__); } while (0)
+#else
+#define TRACE(...)  do {} while (0)
+#endif
+
+
+
+
+
+
+
 #ifdef __cplusplus
 }
 #endif

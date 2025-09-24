@@ -7,6 +7,7 @@
 void ppu_reset(void)
 {
     ppu_regs_reset();
+    ppu_timing_reset();
 }
 
 uint8_t ppu_read(uint16_t cpu_addr)
@@ -19,6 +20,11 @@ void ppu_write(uint16_t cpu_addr, uint8_t value)
     ppu_regs_write(cpu_addr, value);
 }
 
+bool ppu_in_vblank(void)
+{
+    return (ppu_regs_status_peek() & 0x80) != 0;
+}
+
 // For early boot/testing: treat “fake vblank on/off” as set/clear VBlank.
 void ppu_set_fake_vblank(int on)
 {
@@ -26,7 +32,7 @@ void ppu_set_fake_vblank(int on)
 }
 
 // Optional timing hook (no-op for now)
-void ppu_step(int cpu_cycles)
-{
-    (void)cpu_cycles;
-}
+// void ppu_step(int cpu_cycles)
+// {
+//     (void)cpu_cycles;
+// }
