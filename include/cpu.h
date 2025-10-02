@@ -47,6 +47,10 @@ uint64_t cpu_get_cycles(void);
 void cpu_dma_stall(int cycles); // large one-shot stalls (e.g., $4014 OAM DMA)
 int cpu_cycles_parity(void); // 0 = even cycle, 1 = odd (for 513/514 DMA)
 
+
+void cpu_irq_assert(void);
+void cpu_irq_clear(void);
+
 // -----------------------------------------------------------------------------
 // Register Accessors
 // -----------------------------------------------------------------------------

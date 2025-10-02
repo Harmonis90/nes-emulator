@@ -16,6 +16,11 @@ struct MapperOps
 int mapper_init(int mapper_id, const uint8_t* prg, size_t prg_size, const uint8_t* chr, size_t chr_size);
 // Simple mapper dispatch API used by CPU/PPU back-ends
 
+// mapper 4 init
+const struct MapperOps* mapper_mmc3_init(const uint8_t* prg, size_t prg_size,
+                                         const uint8_t* chr, size_t chr_size);
+
+
 void mapper_reset(void);
 
 // CPU <-> PRG

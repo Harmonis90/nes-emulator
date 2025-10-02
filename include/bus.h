@@ -33,5 +33,8 @@ enum
     VEC_RESET = 0xFFFC,
     VEC_IRQ_BRK = 0xFFFE
 };
+// Debug counters for tests
+int bus_io_4014_write_count(void);
+int bus_wram_spritebuf_write_count(void);
 
 #endif //NES_BUS_H

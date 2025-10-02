@@ -16,6 +16,11 @@ int mapper_init(int mapper_id,
     case 0: // NROM
         ops = mapper_nrom_init(prg, prg_size, chr, chr_size);
         return ops != NULL;
+
+    case 4:
+        ops = mapper_mmc3_init(prg, prg_size, chr, chr_size);
+        return ops != NULL;
+
     default:
         fprintf(stderr, "mapper: unsupported id %d\n", mapper_id);
         ops = NULL;

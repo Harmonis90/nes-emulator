@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "ines.h"
 #include "mapper.h"
@@ -14,6 +15,57 @@ static int is_ines1(const uint8_t* rom, size_t len) {
     return rom && len >= INES_HEADER_SIZE &&
            rom[0] == 'N' && rom[1] == 'E' && rom[2] == 'S' && rom[3] == 0x1A;
 }
+
+uint8_t* ines_read_file(const char* path, size_t* out_size)
+{
+    if (out_size) *out_size = 0;
+    if (!path) return NULL;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        perror("fopen");
+        return NULL;
+    }
+
+    if (fseek(f, 0, SEEK_END) != 0) {
+        perror("fseek");
+        fclose(f);
+        return NULL;
+    }
+
+    long n = ftell(f);
+    if (n <= 0) {
+        fprintf(stderr, "ines_read_file: empty or unreadable file\n");
+        fclose(f);
+        return NULL;
+    }
+
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        perror("fseek");
+        fclose(f);
+        return NULL;
+    }
+
+    uint8_t* buf = (uint8_t*)malloc((size_t)n);
+    if (!buf) {
+        fprintf(stderr, "ines_read_file: OOM allocating %ld bytes\n", n);
+        fclose(f);
+        return NULL;
+    }
+
+    size_t rd = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+
+    if (rd != (size_t)n) {
+        fprintf(stderr, "ines_read_file: short read (%zu/%ld)\n", rd, n);
+        free(buf);
+        return NULL;
+    }
+
+    if (out_size) *out_size = (size_t)n;
+    return buf;
+}
+
 
 int ines_load(const uint8_t* rom, size_t len)
 {

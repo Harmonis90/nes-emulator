@@ -1,7 +1,6 @@
 //
 // Created by Seth on 8/30/2025.
 //
-
 #ifndef NES_PPU_H
 #define NES_PPU_H
 
@@ -12,35 +11,46 @@
 extern "C"{
 #endif
 
-// Initialize/reset the PPU stub state (call at power-on/reset)
-void ppu_reset(void);
+    // ----------------------------------------------------------------------------
+    // Core PPU entry points
+    // ----------------------------------------------------------------------------
 
-// CPU-visible register access ($2000–$3FFF, mirrored every 8 bytes)
-uint8_t ppu_read(uint16_t cpu_addr);
-void ppu_write(uint16_t cpu_addr, uint8_t value);
+    // Initialize/reset the PPU state (call at power-on/reset)
+    void     ppu_reset(void);
 
-// Optional: enable/disable “fake vblank” so many ROMs can leave init loops.
-// When enabled (default), $2002’s VBlank bit will be set frequently.
-void ppu_set_fake_vblank(int on);
+    // CPU-visible register access ($2000–$3FFF, mirrored every 8 bytes)
+    uint8_t  ppu_read(uint16_t cpu_addr);
+    void     ppu_write(uint16_t cpu_addr, uint8_t value);
 
-bool ppu_in_vblank(void);
-// Optional: advance PPU timing; call periodically with CPU cycles elapsed.
-// In the stub, this just re-asserts VBlank after a short delay when enabled.
-void ppu_step(int cpu_cycles);
+    // Optional: enable/disable “fake vblank” (used by some early tests)
+    void     ppu_set_fake_vblank(int on);
 
-// DMA: copy 256 bytes from CPU page (page<<8) into OAM[0..255]
-void ppu_oam_dma(uint8_t page);
+    // True while PPUSTATUS bit 7 (VBlank) is set
+    bool     ppu_in_vblank(void);
 
-// Direct OAM accessors (handy for unit tests)
-void ppu_oam_write_byte(uint8_t index, uint8_t val);
-uint8_t ppu_oam_read_byte(uint8_t index);
-uint8_t const* ppu_oam_data(void); // read only pointer for debug/tests
+    // Optional: advance PPU timing; call with CPU cycles elapsed (if used)
+    void     ppu_step(int cpu_cycles);
 
-// ppu timing functions
-void ppu_timing_reset(void);
-uint64_t ppu_frame_count(void);
+    // PPU timing helpers
+    void     ppu_timing_reset(void);
+    uint64_t ppu_frame_count(void);
+
+    // Renderer — writes a full ARGB8888 frame (256x240)
+    void     ppu_render_argb8888(uint32_t* dst, int pitch_bytes);
+
+    // ----------------------------------------------------------------------------
+    // Lightweight debug / stats (used by tests)
+    // Implemented in ppu_regs.c; exposed here so tests only need ppu.h
+    // ----------------------------------------------------------------------------
+    int      ppu_dma_count(void);             // number of $4014 DMA ops performed
+    int      ppu_oamaddr_write_count(void);   // writes to $2003
+    int      ppu_oamdata_write_count(void);   // writes to $2004
+    int      ppu_nmi_count(void);             // NMIs actually fired
+    uint8_t  ppu_ppuctrl_get(void);           // current $2000 latch
+    uint8_t  ppu_ppustatus_get(void);         // current $2002 latch (no side effects)
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif //NES_PPU_H
+#endif // NES_PPU_H

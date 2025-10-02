@@ -13,9 +13,13 @@
 static struct
 {
     uint64_t cycles; // total cycles since reset
-    int irq_pending; // maskable irq request
+    int irq_pending; // (legacy) maskable irq request - no longer used by MMC3 path
     int nmi_pending; // non-maskable IRQ requested
-}cpu_ctx;
+} cpu_ctx;
+
+// Level-sensitive IRQ line (0=inactive, 1=asserted). Mappers (e.g. MMC3)
+// assert this line; CPU services it when I=0. It stays asserted until cleared.
+static int irq_line = 0;
 
 // -----------------------------------------------------------------------------
 // Cycle counter API
@@ -36,6 +40,7 @@ void cpu_cycles_add(int n)
 void cpu_reset(void)
 {
     memset(&cpu_ctx, 0, sizeof(cpu_ctx));
+    irq_line = 0;
 
     // Reset registers
     cpu_set_a(0);
@@ -46,20 +51,16 @@ void cpu_reset(void)
 
     // Load reset vector at $FFFC/$FFFD
     uint8_t lo =  cpu_read(0xFFFC);
-    uint8_t hi = cpu_read(0xFFFD);
+    uint8_t hi =  cpu_read(0xFFFD);
     cpu_set_pc((uint16_t)(lo | (hi << 8)));
 
     cpu_ctx.cycles = 7; // reset takes 7 cycles
-
 }
 
-void cpu_irq(void)
-{
-    if (!get_flag(FLAG_I))
-    {
-        cpu_ctx.irq_pending = 1;
-    }
-}
+// New: level IRQ API (assert/clear). Keep cpu_irq() as a compatibility alias.
+void cpu_irq_assert(void) { irq_line = 1; }
+void cpu_irq_clear(void)  { irq_line = 0; }
+void cpu_irq(void)        { cpu_irq_assert(); }
 
 void cpu_nmi(void)
 {
@@ -71,9 +72,20 @@ void cpu_nmi(void)
 // -----------------------------------------------------------------------------
 void cpu_step(void)
 {
-    // interrupts (keep as-is)
-    if (cpu_ctx.nmi_pending) { cpu_ctx.nmi_pending = 0; interrupt_enter(0xFFFA, 0); cpu_cycles_add(7); }
-    if (cpu_ctx.irq_pending) { cpu_ctx.irq_pending = 0; interrupt_enter(0xFFFE, 0); cpu_cycles_add(7); }
+    // Service NMI edge if latched
+    if (cpu_ctx.nmi_pending) {
+        cpu_ctx.nmi_pending = 0;
+        interrupt_enter(0xFFFA, 0);
+        cpu_cycles_add(7);
+    }
+
+    // Service IRQ on level if asserted and I=0 (do NOT clear irq_line here;
+    // mapper must acknowledge/clear via cpu_irq_clear()).
+    if (irq_line && !get_flag(FLAG_I)) {
+        interrupt_enter(0xFFFE, 0);
+        cpu_cycles_add(7);
+        // irq_line remains asserted until mapper clears it (e.g., MMC3 $E000)
+    }
 
     const uint64_t cyc0 = cpu_get_cycles();
     const uint16_t pc   = cpu_get_pc();
@@ -98,8 +110,6 @@ void cpu_step(void)
           cpu_get_pc(), cpu_get_a(), cpu_get_x(), cpu_get_y(), cpu_get_p());
 }
 
-
-
 // -----------------------------------------------------------------------------
 // Optional disassembler (for debugging / testing)
 // -----------------------------------------------------------------------------
@@ -109,8 +119,8 @@ const char* cpu_dissasm(uint16_t pc, char* buf, size_t buflen)
 
     uint8_t opcode = cpu_read(pc);
     const char* mnem = cpu_mnemonic[opcode];
-    const char* am = cpu_addrmode[opcode];
-    uint8_t len = cpu_instr_len[opcode];
+    const char* am   = cpu_addrmode[opcode];
+    uint8_t len      = cpu_instr_len[opcode];
 
     if (len == 1) {
         snprintf(buf, buflen, "%04X  %02X       %s %s",

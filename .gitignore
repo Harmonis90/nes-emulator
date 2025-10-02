@@ -7,7 +7,7 @@ CMakeFiles/
 # IDE files
 .idea/
 *.iml
-
+/tests/
 # OS crap
 .DS_Store
 Thumbs.db
